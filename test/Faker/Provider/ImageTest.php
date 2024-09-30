@@ -13,7 +13,7 @@ final class ImageTest extends TestCase
     public function testImageUrlUses640x680AsTheDefaultSize(): void
     {
         self::assertMatchesRegularExpression(
-            '#^https://via.placeholder.com/640x480.png/#',
+            '#^https://picsum.photos/640/480#',
             Image::imageUrl(),
         );
     }
@@ -21,83 +21,32 @@ final class ImageTest extends TestCase
     public function testImageUrlAcceptsCustomWidthAndHeight(): void
     {
         self::assertMatchesRegularExpression(
-            '#^https://via.placeholder.com/800x400.png/#',
+            '#^https://picsum.photos/800/400#',
             Image::imageUrl(800, 400),
-        );
-    }
-
-    public function testImageUrlAcceptsCustomCategory(): void
-    {
-        self::assertMatchesRegularExpression(
-            '#^https://via.placeholder.com/800x400.png/[\w]{6}\?text=nature\+.*#',
-            Image::imageUrl(800, 400, 'nature'),
-        );
-    }
-
-    public function testImageUrlAcceptsCustomText(): void
-    {
-        self::assertMatchesRegularExpression(
-            '#^https://via.placeholder.com/800x400.png/[\w]{6}\?text=nature\+Faker#',
-            Image::imageUrl(800, 400, 'nature', false, 'Faker'),
         );
     }
 
     public function testImageUrlReturnsLinkToRegularImageWhenGrayIsFalse(): void
     {
-        $imageUrl = Image::imageUrl(
-            800,
-            400,
-            'nature',
-            false,
-            'Faker',
-            false,
-        );
+        $imageUrl = Image::imageUrl(800, 400);
 
         self::assertMatchesRegularExpression(
-            '#^https://via.placeholder.com/800x400.png/[\w]{6}\?text=nature\+Faker#',
+            '#^https://picsum.photos/800/400#',
             $imageUrl,
         );
     }
 
     public function testImageUrlReturnsLinkToRegularImageWhenGrayIsTrue(): void
     {
-        $imageUrl = Image::imageUrl(
-            800,
-            400,
-            'nature',
-            false,
-            'Faker',
-            true,
-        );
+        $imageUrl = Image::imageUrl(800, 400, true, true);
 
         self::assertMatchesRegularExpression(
-            '#^https://via.placeholder.com/800x400.png/CCCCCC\?text=nature\+Faker#',
+            '#^https://picsum.photos/800/400\?grayscale#',
             $imageUrl,
         );
+
     }
 
-    public function testImageUrlAddsARandomGetParameterByDefault(): void
-    {
-        $url = Image::imageUrl(800, 400);
-        $splitUrl = preg_split('/\?text=/', $url);
-
-        self::assertEquals(count($splitUrl), 2);
-        self::assertMatchesRegularExpression('#\w*#', $splitUrl[1]);
-    }
-
-    public function testImageUrlThrowsExceptionOnInvalidImageFormat(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-        Image::imageUrl(
-            800,
-            400,
-            'nature',
-            false,
-            'Faker',
-            true,
-            'foo',
-        );
-    }
 
     public function testImageUrlAcceptsDifferentImageFormats(): void
     {
@@ -105,15 +54,16 @@ final class ImageTest extends TestCase
             $imageUrl = Image::imageUrl(
                 800,
                 400,
-                'nature',
                 false,
-                'Faker',
-                true,
-                $format,
+                false,
+                false,
+                null,
+                null,
+                $format
             );
 
             self::assertMatchesRegularExpression(
-                "#^https://via.placeholder.com/800x400.{$format}/CCCCCC\?text=nature\+Faker#",
+                "#^https://picsum.photos/800/400.{$format}#",
                 $imageUrl,
             );
         }
@@ -121,32 +71,33 @@ final class ImageTest extends TestCase
 
     public function testDownloadWithDefaults(): void
     {
-        self::checkUrlConnection(Image::BASE_URL);
+        self::checkUrlConnection('https://picsum.photos');
+
 
         $file = Image::image(sys_get_temp_dir());
         self::assertFileExists($file);
 
-        self::checkImageProperties($file, 640, 480, 'png');
+        self::checkImageProperties($file, 640, 480, 'jpg');
     }
 
     public function testDownloadWithDifferentImageFormats(): void
     {
-        self::checkUrlConnection(Image::BASE_URL);
+        self::checkUrlConnection('https://picsum.photos');
 
-        foreach (Image::getFormats() as $format) {
+        $formats = ['jpg', 'webp'];
+        foreach ($formats as $format) {
             $width = 800;
             $height = 400;
             $file = Image::image(
                 sys_get_temp_dir(),
                 $width,
                 $height,
-                'nature',
                 true,
                 false,
-                'Faker',
-                true,
-                $format,
+                false,
+                $format
             );
+          
             self::assertFileExists($file);
 
             self::checkImageProperties($file, $width, $height, $format);

@@ -10,11 +10,20 @@ class Image extends Base
     /**
      * @var string
      */
-    public const BASE_URL = 'https://via.placeholder.com';
+    protected static $baseUrl = 'https://picsum.photos';
 
     public const FORMAT_JPG = 'jpg';
-    public const FORMAT_JPEG = 'jpeg';
-    public const FORMAT_PNG = 'png';
+    public const FORMAT_WEBP = 'webp';
+
+     /**
+     * Set the base URL for image generation
+     *
+     * @param string $url
+     */
+    public static function setBaseUrl($url)
+    {
+        self::$baseUrl = rtrim($url, '/');
+    }
 
     /**
      * @var array
@@ -27,73 +36,72 @@ class Image extends Base
     ];
 
     /**
-     * Generate the URL that will return a random image
+     * Generate the URL that will return a random image from Lorem Picsum
      *
-     * Set randomize to false to remove the random GET parameter at the end of the url.
-     *
-     * @example 'http://via.placeholder.com/640x480.png/CCCCCC?text=well+hi+there'
-     *
-     * @param int         $width
-     * @param int         $height
-     * @param string|null $category
-     * @param bool        $randomize
-     * @param string|null $word
-     * @param bool        $gray
-     * @param string      $format
+     * @param int $width
+     * @param int $height
+     * @param bool $grayscale
+     * @param bool $blur
+     * @param string|null $specificImage
+     * @param bool $randomize
+     * @param string|null $seed
+     * @param string|null $format Image format (e.g., 'jpg', 'webp')
      *
      * @return string
      */
     public static function imageUrl(
         $width = 640,
         $height = 480,
-        $category = null,
         $randomize = true,
-        $word = null,
-        $gray = false,
-        $format = 'png'
+        $grayscale = false,      
+        $blur = false,
+        $specificImage = null,
+        $seed = null,
+        $format = null
     ) {
-        trigger_deprecation(
-            'fakerphp/faker',
-            '1.20',
-            'Provider is deprecated and will no longer be available in Faker 2. Please use a custom provider instead',
-        );
+        $url = self::$baseUrl;
 
-        // Validate image format
-        $imageFormats = static::getFormats();
-
-        if (!in_array(strtolower($format), $imageFormats, true)) {
-            throw new \InvalidArgumentException(sprintf(
-                'Invalid image format "%s". Allowable formats are: %s',
-                $format,
-                implode(', ', $imageFormats),
-            ));
+        // If a specific image is requested, add it to the URL
+        if ($specificImage !== null) {
+            $url .= "/id/{$specificImage}";
         }
 
-        $size = sprintf('%dx%d.%s', $width, $height, $format);
-
-        $imageParts = [];
-
-        if ($category !== null) {
-            $imageParts[] = $category;
+        // Add dimensions and format
+        $url .= "/{$width}/{$height}";
+        if ($format !== null) {
+            $url .= ".{$format}";
         }
 
-        if ($word !== null) {
-            $imageParts[] = $word;
+        $params = [];
+
+        // Add grayscale if requested
+        if ($grayscale) {
+            $params[] = 'grayscale';
         }
 
-        if ($randomize === true) {
-            $imageParts[] = Lorem::word();
+        // Add blur if requested (value between 1-10)
+        if ($blur) {
+            $blurAmount = mt_rand(1, 10);
+            $params[] = "blur={$blurAmount}";
         }
 
-        $backgroundColor = $gray === true ? 'CCCCCC' : str_replace('#', '', Color::safeHexColor());
+        // Add seed if provided
+        if ($seed !== null) {
+            $params[] = "seed={$seed}";
+        }
 
-        return sprintf(
-            '%s/%s/%s%s',
-            self::BASE_URL,
-            $size,
-            $backgroundColor,
-            count($imageParts) > 0 ? '?text=' . urlencode(implode(' ', $imageParts)) : '',
-        );
+        // Add randomization if requested
+        if ($randomize && $seed === null) {
+            $params[] = 'random=' . mt_rand(1, 1000);
+        }
+
+        // Append parameters to URL if any
+        if (!empty($params)) {
+            $url .= '?' . implode('&', $params);
+        }
+
+        return $url;
+  
     }
 
     /**
@@ -101,7 +109,7 @@ class Image extends Base
      *
      * Requires curl, or allow_url_fopen to be on in php.ini.
      *
-     * @example '/path/to/dir/13b73edae8443990be1aa8f1a483bc27.png'
+     * @example '/path/to/dir/13b73edae8443990be1aa8f1a483bc27.jpg'
      *
      * @return bool|string
      */
@@ -109,19 +117,11 @@ class Image extends Base
         $dir = null,
         $width = 640,
         $height = 480,
-        $category = null,
         $fullPath = true,
         $randomize = true,
-        $word = null,
-        $gray = false,
-        $format = 'png'
+        $grayscale = false,      
+        $format = 'jpg'
     ) {
-        trigger_deprecation(
-            'fakerphp/faker',
-            '1.20',
-            'Provider is deprecated and will no longer be available in Faker 2. Please use a custom provider instead',
-        );
-
         $dir = null === $dir ? sys_get_temp_dir() : $dir; // GNU/Linux / OS X / Windows compatible
 
         // Validate directory path
@@ -135,15 +135,18 @@ class Image extends Base
         $filename = sprintf('%s.%s', $name, $format);
         $filepath = $dir . DIRECTORY_SEPARATOR . $filename;
 
-        $url = static::imageUrl($width, $height, $category, $randomize, $word, $gray, $format);
+        $url = static::imageUrl($width, $height, $randomize, $grayscale, false, null, null, $format);
 
         // save file
         if (function_exists('curl_exec')) {
-            // use cURL
+
             $fp = fopen($filepath, 'w');
             $ch = curl_init($url);
             curl_setopt($ch, CURLOPT_FILE, $fp);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
             $success = curl_exec($ch) && curl_getinfo($ch, CURLINFO_HTTP_CODE) === 200;
+            
             fclose($fp);
             curl_close($ch);
 
@@ -170,27 +173,14 @@ class Image extends Base
 
     public static function getFormats(): array
     {
-        trigger_deprecation(
-            'fakerphp/faker',
-            '1.20',
-            'Provider is deprecated and will no longer be available in Faker 2. Please use a custom provider instead',
-        );
-
         return array_keys(static::getFormatConstants());
     }
 
     public static function getFormatConstants(): array
     {
-        trigger_deprecation(
-            'fakerphp/faker',
-            '1.20',
-            'Provider is deprecated and will no longer be available in Faker 2. Please use a custom provider instead',
-        );
-
         return [
             static::FORMAT_JPG => constant('IMAGETYPE_JPEG'),
-            static::FORMAT_JPEG => constant('IMAGETYPE_JPEG'),
-            static::FORMAT_PNG => constant('IMAGETYPE_PNG'),
+            static::FORMAT_WEBP => constant('IMAGETYPE_WEBP'),
         ];
     }
 }
